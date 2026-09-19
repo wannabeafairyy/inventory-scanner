@@ -1,0 +1,12 @@
+[phases.setup]
+nixPkgs = [
+    "php84", # Sesuaikan dengan versi PHP Anda (misal php83 atau php84)
+    "composer",
+    "libxml2",
+    "openssl",
+    "curl",
+    "oniguruma",
+    "libzip",
+    "zlib",
+    "gd"
+]
