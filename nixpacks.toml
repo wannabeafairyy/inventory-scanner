@@ -1,7 +1,8 @@
 [phases.setup]
 nixPkgs = [
-    "php84", # Sesuaikan dengan versi PHP Anda (misal php83 atau php84)
+    "php84",
     "composer",
+    "nodejs_20",
     "libxml2",
     "openssl",
     "curl",
@@ -10,3 +11,18 @@ nixPkgs = [
     "zlib",
     "gd"
 ]
+
+[phases.install]
+cmds = [
+    "composer install --no-dev --optimize-autoloader --no-interaction",
+    "npm ci --ignore-scripts || npm install --ignore-scripts"
+]
+
+[phases.build]
+cmds = [
+    "npm run build",
+    "php artisan config:clear"
+]
+
+[start]
+cmd = "php artisan migrate --force && php artisan serve --host=0.0.0.0 --port=${PORT:-8000}"

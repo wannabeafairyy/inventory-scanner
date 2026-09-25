@@ -35,4 +35,13 @@ return [
         ],
     ],
 
+    'gemini' => [
+        'key' => env('GEMINI_API_KEY'),
+    ],
+
+    'google' => [
+        // Isi JSON service account (raw atau base64). Prioritas di atas file lokal.
+        'credentials_json' => env('GOOGLE_CREDENTIALS_JSON'),
+    ],
+
 ];

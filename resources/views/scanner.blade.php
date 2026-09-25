@@ -12,14 +12,14 @@
     <div class="max-w-4xl mx-auto space-y-6">
         <header>
             <h1 class="text-3xl font-bold tracking-tight text-blue-900">Inventory Scanner</h1>
-            <p class="text-gray-500">Foto form peminjaman tulisan tangan, AI akan membacanya termasuk nama peminjam, dan simpan ke Google Sheets.</p>
+            <p class="text-gray-500">Foto form pengambilan tulisan tangan, AI akan membacanya termasuk nama peminjam, dan simpan ke Google Sheets.</p>
         </header>
 
         <div id="statusAlert" class="hidden p-4 rounded-md text-sm"></div>
 
         <!-- 1. Pengaturan Sheets -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-            <h2 class="text-lg font-semibold mb-4">1. Tujuan Google Sheets</h2>
+            <h2 class="text-lg font-semibold mb-4">1. Google Sheets</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <label class="block text-sm font-medium text-gray-700">Sheet ID</label>
@@ -34,21 +34,21 @@
 
         <!-- 2. Kamera & Upload -->
         <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
-            <h2 class="text-lg font-semibold">2. Ambil Foto Dokumen</h2>
+            <h2 class="text-lg font-semibold">2. Upload Dokumen</h2>
             <input type="file" id="imageInput" accept="image/*" capture="environment" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
             
             <div id="previewContainer" class="hidden mt-4 space-y-4">
                 <img id="imagePreview" class="max-h-80 w-full object-contain rounded border bg-gray-50">
                 <button id="btnScan" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 transition">
-                    Proses dengan AI
+                    Mulai Deteksi AI
                 </button>
             </div>
         </div>
 
         <!-- 3. Review & Edit -->
         <div id="reviewSection" class="hidden bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
-            <h2 class="text-lg font-semibold">3. Review Hasil Bacaan AI</h2>
-            <p class="text-sm text-gray-500">Cek kembali data peminjam dan barang sebelum disimpan ke Sheets.</p>
+            <h2 class="text-lg font-semibold">3. Review Hasil Deteksi AI</h2>
+            <p class="text-sm text-gray-500">Cek kembali data pengambil dan barang sebelum disimpan ke Sheets.</p>
             
             <div id="rowsContainer" class="space-y-4"></div>
             
@@ -93,23 +93,43 @@
         }
 
         async function compressImage(file, maxWidth = 1200) {
-            return new Promise((resolve) => {
+            return new Promise((resolve, reject) => {
+                if (!file) {
+                    reject(new Error('Tidak ada file gambar yang dipilih.'));
+                    return;
+                }
+                const MAX_BYTES = 12 * 1024 * 1024;
+                if (file.size > MAX_BYTES) {
+                    reject(new Error('Ukuran file terlalu besar. Maksimal 12MB.'));
+                    return;
+                }
                 const reader = new FileReader();
+                reader.onerror = () => reject(new Error('Gagal membaca file gambar.'));
                 reader.readAsDataURL(file);
                 reader.onload = (event) => {
                     const img = new Image();
+                    img.onerror = () => reject(new Error('File gambar rusak atau tidak didukung.'));
                     img.src = event.target.result;
                     img.onload = () => {
-                        if (img.width <= maxWidth) return resolve(file);
-                        const canvas = document.createElement('canvas');
-                        const scaleSize = maxWidth / img.width;
-                        canvas.width = maxWidth;
-                        canvas.height = img.height * scaleSize;
-                        const ctx = canvas.getContext('2d');
-                        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                        canvas.toBlob((blob) => {
-                            resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
-                        }, 'image/jpeg', 0.8);
+                        try {
+                            if (img.width <= maxWidth) return resolve(file);
+                            const canvas = document.createElement('canvas');
+                            const scaleSize = maxWidth / img.width;
+                            canvas.width = maxWidth;
+                            canvas.height = Math.round(img.height * scaleSize);
+                            const ctx = canvas.getContext('2d');
+                            if (!ctx) return resolve(file);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            canvas.toBlob((blob) => {
+                                if (!blob) {
+                                    reject(new Error('Gagal mengompresi gambar.'));
+                                    return;
+                                }
+                                resolve(new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() }));
+                            }, 'image/jpeg', 0.8);
+                        } catch (err) {
+                            reject(err instanceof Error ? err : new Error('Gagal memproses gambar.'));
+                        }
                     };
                 };
             });
@@ -120,7 +140,9 @@
             statusAlert.classList.add('hidden');
             if (imageFile) {
                 const reader = new FileReader();
+                reader.onerror = () => showAlert('Gagal membaca file gambar.');
                 reader.onload = (e) => {
+                    imagePreview.onerror = () => showAlert('Preview gambar gagal dimuat. File mungkin korup.');
                     imagePreview.src = e.target.result;
                     previewContainer.classList.remove('hidden');
                     reviewSection.classList.add('hidden');
@@ -131,6 +153,10 @@
 
         btnScan.addEventListener('click', async () => {
             statusAlert.classList.add('hidden');
+            if (!imageFile) {
+                showAlert('Pilih file gambar terlebih dahulu.');
+                return;
+            }
             const originalText = btnScan.innerText;
             btnScan.disabled = true;
 
@@ -163,20 +189,37 @@
             }
         });
 
+        function createReviewField(labelText, value, inputClass) {
+            const wrapper = document.createElement('div');
+            const label = document.createElement('label');
+            label.className = 'text-xs text-gray-500 font-semibold uppercase';
+            label.textContent = labelText;
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.className = inputClass + ' w-full border border-gray-300 rounded p-2';
+            input.value = value ?? '';
+            wrapper.appendChild(label);
+            wrapper.appendChild(input);
+            return wrapper;
+        }
+
         function renderReviewRows(rows) {
             rowsContainer.innerHTML = '';
             if(!rows || rows.length === 0) {
-                rowsContainer.innerHTML = '<p class="text-red-500 text-sm">Tidak ada data yang terbaca dari gambar.</p>';
+                const emptyMsg = document.createElement('p');
+                emptyMsg.className = 'text-red-500 text-sm';
+                emptyMsg.textContent = 'Tidak ada data yang terbaca dari gambar.';
+                rowsContainer.appendChild(emptyMsg);
                 return;
             }
             rows.forEach((row) => {
-                rowsContainer.innerHTML += `
-                    <div class="border rounded-md p-4 bg-gray-50 grid grid-cols-1 md:grid-cols-4 gap-4 row-item">
-                        <div><label class="text-xs text-gray-500 font-semibold uppercase">Tanggal</label><input type="text" class="input-date w-full border border-gray-300 rounded p-2" value="${row.date || ''}"></div>
-                        <div><label class="text-xs text-gray-500 font-semibold uppercase">Nama Peminjam</label><input type="text" class="input-borrower w-full border border-gray-300 rounded p-2" value="${row.borrowerName || ''}"></div>
-                        <div><label class="text-xs text-gray-500 font-semibold uppercase">Nama Barang</label><input type="text" class="input-item w-full border border-gray-300 rounded p-2" value="${row.itemName || ''}"></div>
-                        <div><label class="text-xs text-gray-500 font-semibold uppercase">Jumlah</label><input type="text" class="input-qty w-full border border-gray-300 rounded p-2" value="${row.quantityTaken || ''}"></div>
-                    </div>`;
+                const card = document.createElement('div');
+                card.className = 'border rounded-md p-4 bg-gray-50 grid grid-cols-1 md:grid-cols-4 gap-4 row-item';
+                card.appendChild(createReviewField('Tanggal', row.date || '', 'input-date'));
+                card.appendChild(createReviewField('Nama Pengambil', row.borrowerName || '', 'input-borrower'));
+                card.appendChild(createReviewField('Nama Barang', row.itemName || '', 'input-item'));
+                card.appendChild(createReviewField('Jumlah', row.quantityTaken || '', 'input-qty'));
+                rowsContainer.appendChild(card);
             });
         }
 

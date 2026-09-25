@@ -1,9 +1,9 @@
 <?php
 
 ini_set('display_errors', '0');
-ini_set('upload_max_filesize', '20M');
-ini_set('post_max_size', '20M');
-ini_set('max_execution_time', '0');
+ini_set('upload_max_filesize', '12M');
+ini_set('post_max_size', '13M');
+ini_set('max_execution_time', '60');
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -16,51 +16,106 @@ Route::get('/scanner', function () {
 Route::post('/api/scan', function (Request $request) {
     if (function_exists('ob_clean')) { ob_clean(); }
     ini_set('display_errors', 0);
-    $request->validate(['image' => 'required|image|max:12288']);
-    
+    $request->validate([
+        'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:12288|dimensions:max_width=6000,max_height=6000',
+    ]);
+
     $image = $request->file('image');
     $imagePath = $image->getRealPath();
-    
-    // --- KOMPRESI & RESIZE OTOMATIS SUPAYA TIDAK TIMEOUT ---
-    list($width, $height, $type) = getimagesize($imagePath);
-    $maxDim = 1280; // Batasi sisi maksimal 1280px agar ringan dikirim
-    
+
+    $info = @getimagesize($imagePath);
+    if ($info === false) {
+        return response()->json(['error' => 'File gambar tidak valid atau korup.'], 422);
+    }
+    [$width, $height, $type] = $info;
+
+    if ($width <= 0 || $height <= 0) {
+        return response()->json(['error' => 'Dimensi gambar tidak valid.'], 422);
+    }
+
+    // Cegah OOM: tolak gambar dengan total piksel terlalu besar (~25MP).
+    if (($width * $height) > 25000000) {
+        return response()->json(['error' => 'Resolusi gambar terlalu besar. Maksimal 6000x6000 piksel.'], 422);
+    }
+
+    if (! in_array($type, [IMAGETYPE_JPEG, IMAGETYPE_PNG, IMAGETYPE_WEBP], true)) {
+        return response()->json(['error' => 'Format gambar harus JPEG, PNG, atau WebP.'], 422);
+    }
+
+    $maxDim = 1280;
+
     if ($width > $maxDim || $height > $maxDim) {
         $ratio = $width / $height;
         if ($ratio > 1) {
             $newWidth = $maxDim;
-            $newHeight = $maxDim / $ratio;
+            $newHeight = (int) round($maxDim / $ratio);
         } else {
             $newHeight = $maxDim;
-            $newWidth = $maxDim * $ratio;
+            $newWidth = (int) round($maxDim * $ratio);
         }
     } else {
         $newWidth = $width;
         $newHeight = $height;
     }
 
-    $src = match ($type) {
-        IMAGETYPE_JPEG => imagecreatefromjpeg($imagePath),
-        IMAGETYPE_PNG => imagecreatefrompng($imagePath),
-        IMAGETYPE_WEBP => imagecreatefromwebp($imagePath),
-        default => imagecreatefromjpeg($imagePath)
-    };
+    $newWidth = max(1, (int) $newWidth);
+    $newHeight = max(1, (int) $newHeight);
 
-    $dst = imagecreatetruecolor($newWidth, $newHeight);
-    imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height);
-    
-    // Simpan sementara gambar yang sudah dikecilkan ukurannya ke memory buffer
-    ob_start();
-    imagejpeg($dst, null, 80); // Kualitas 80% (sangat cukup untuk dibaca AI & cepat)
-    $compressedImageBinary = ob_get_clean();
-    
-    imagedestroy($src);
-    imagedestroy($dst);
+    $src = null;
+    $dst = null;
+    $compressedImageBinary = false;
+    $obLevel = ob_get_level();
+
+    try {
+        $src = match ($type) {
+            IMAGETYPE_JPEG => @imagecreatefromjpeg($imagePath),
+            IMAGETYPE_PNG => @imagecreatefrompng($imagePath),
+            IMAGETYPE_WEBP => @imagecreatefromwebp($imagePath),
+        };
+
+        if ($src === false || $src === null) {
+            return response()->json(['error' => 'Gagal membaca file gambar.'], 422);
+        }
+
+        $dst = @imagecreatetruecolor($newWidth, $newHeight);
+        if ($dst === false) {
+            return response()->json(['error' => 'Gagal memproses gambar (memori tidak cukup).'], 500);
+        }
+
+        if (! @imagecopyresampled($dst, $src, 0, 0, 0, 0, $newWidth, $newHeight, $width, $height)) {
+            return response()->json(['error' => 'Gagal mengubah ukuran gambar.'], 500);
+        }
+
+        ob_start();
+        $ok = @imagejpeg($dst, null, 80);
+        $compressedImageBinary = ob_get_clean();
+
+        if (! $ok || ! is_string($compressedImageBinary) || $compressedImageBinary === '') {
+            $compressedImageBinary = false;
+            return response()->json(['error' => 'Gagal mengompresi gambar.'], 500);
+        }
+    } finally {
+        if ($src instanceof \GdImage || is_resource($src)) {
+            @imagedestroy($src);
+        }
+        if ($dst instanceof \GdImage || is_resource($dst)) {
+            @imagedestroy($dst);
+        }
+        // Bersihkan hanya buffer yang dibuka di blok ini, jangan sentuh buffer luar Laravel.
+        while (ob_get_level() > $obLevel) {
+            if (@ob_end_clean() === false) {
+                break;
+            }
+        }
+    }
+
+    if (! is_string($compressedImageBinary) || $compressedImageBinary === '') {
+        return response()->json(['error' => 'Gagal mengompresi gambar.'], 500);
+    }
 
     $base64Image = base64_encode($compressedImageBinary);
-    // --------------------------------------------------------
     
-    $apiKey = env('GEMINI_API_KEY'); 
+    $apiKey = config('services.gemini.key'); 
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={$apiKey}";
     
     $prompt = "Kamu adalah sistem pemindai formulir inventaris cerdas. " .
@@ -88,8 +143,6 @@ Route::post('/api/scan', function (Request $request) {
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
         curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
         curl_setopt($ch, CURLOPT_TIMEOUT, 60);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4); 
 
         $result = curl_exec($ch);
@@ -115,29 +168,51 @@ Route::post('/api/scan', function (Request $request) {
     } catch (\Throwable $e) {
         return response()->json(['error' => 'Server Error: ' . $e->getMessage()], 500);
     }
-});
+})->middleware('throttle:6,1');
 
 // 2. Rute untuk Menyimpan Data ke Google Sheets (Disesuaikan dengan Scan Timestamp di Kolom E)
 Route::post('/api/save', function (Request $request) {
     if (function_exists('ob_clean')) { ob_clean(); } 
     
     $request->validate([
-        'sheetId' => 'required', 
-        'sheetName' => 'required', 
-        'rows' => 'required|array'
+        'sheetId' => 'required|string|max:128',
+        'sheetName' => 'required|string|max:100',
+        'rows' => 'required|array|max:100',
+        'rows.*.date' => 'nullable|string|max:50',
+        'rows.*.borrowerName' => 'nullable|string|max:100',
+        'rows.*.itemName' => 'nullable|string|max:200',
+        'rows.*.quantityTaken' => 'nullable|string|max:50',
     ]);
 
-    $credentialsPath = base_path('credentials.json'); 
-    
-    if (!file_exists($credentialsPath)) {
-        return response()->json(['error' => 'File credentials.json tidak ditemukan di root folder!'], 500);
-    }
+    $credentialsPath = base_path('credentials.json');
+
+    $credentialsJson = config('services.google.credentials_json');
 
     try {
-        putenv('GOOGLE_APPLICATION_CREDENTIALS=' . $credentialsPath);
         $client = new \Google_Client();
-        $client->useApplicationDefaultCredentials();
         $client->addScope(\Google_Service_Sheets::SPREADSHEETS);
+
+        if (! empty($credentialsJson)) {
+            // Prioritas: env var (wajib di hosting). Mendukung JSON mentah atau base64.
+            $decoded = json_decode($credentialsJson, true);
+            if (! is_array($decoded)) {
+                $maybeBase64 = base64_decode($credentialsJson, true);
+                if (is_string($maybeBase64) && $maybeBase64 !== '') {
+                    $decoded = json_decode($maybeBase64, true);
+                }
+            }
+            if (! is_array($decoded)) {
+                return response()->json(['error' => 'Konfigurasi GOOGLE_CREDENTIALS_JSON tidak valid.'], 500);
+            }
+            $client->setAuthConfig($decoded);
+        } else {
+            // Fallback lokal: file credentials.json (jangan commit file aslinya).
+            if (!file_exists($credentialsPath)) {
+                return response()->json(['error' => 'Kredensial Google belum dikonfigurasi.'], 500);
+            }
+            putenv('GOOGLE_APPLICATION_CREDENTIALS=' . $credentialsPath);
+            $client->useApplicationDefaultCredentials();
+        }
 
         $service = new \Google_Service_Sheets($client);
         
@@ -146,17 +221,16 @@ Route::post('/api/save', function (Request $request) {
 
         $values = array_map(function($row) use ($scanTimestamp) {
             return [
-                $row['date'] ?? '',          // Kolom A: Date
-                $row['borrowerName'] ?? '',  // Kolom B: Borrower Name
-                $row['itemName'] ?? '',      // Kolom C: Item Name
-                $row['quantityTaken'] ?? '', // Kolom D: Quantity Taken
-                $scanTimestamp               // Kolom E: Scan Timestamp Otomatis
+                $row['date'] ?? '',          
+                $row['borrowerName'] ?? '',   
+                $row['itemName'] ?? '',      
+                $row['quantityTaken'] ?? '', 
+                $scanTimestamp               
             ];
         }, $request->rows);
 
         $body = new \Google_Service_Sheets_ValueRange(['values' => $values]);
         
-        // Diubah ke A:E karena sekarang mencakup 5 kolom
         $service->spreadsheets_values->append(
             $request->sheetId, 
             $request->sheetName . '!A:E', 
@@ -168,6 +242,4 @@ Route::post('/api/save', function (Request $request) {
     } catch (\Throwable $e) {
         return response()->json(['error' => 'Gagal Sheets: ' . $e->getMessage()], 500);
     }
-});
-
-// pancingan railway
+})->middleware('throttle:30,1');
