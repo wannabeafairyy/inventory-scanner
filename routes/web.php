@@ -14,7 +14,6 @@ Route::get('/scanner', function () {
 
 // 1. Rute untuk Memindai Gambar dengan AI (Raw cURL murni)
 Route::post('/api/scan', function (Request $request) {
-    if (function_exists('ob_clean')) { ob_clean(); }
     ini_set('display_errors', 0);
     $request->validate([
         'image' => 'required|image|mimes:jpeg,jpg,png,webp|max:12288|dimensions:max_width=6000,max_height=6000',
@@ -115,8 +114,9 @@ Route::post('/api/scan', function (Request $request) {
 
     $base64Image = base64_encode($compressedImageBinary);
     
-    $apiKey = config('services.gemini.key'); 
-    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={$apiKey}";
+    $apiKey = config('services.gemini.key');
+    $model = config('services.gemini.model', 'gemini-3.6-flash');
+    $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
     
     $prompt = "Kamu adalah sistem pemindai formulir inventaris cerdas. " .
               "Baca seluruh baris tulisan tangan pada formulir ini yang terdiri dari: Tanggal, Nama Peminjam, Nama Barang, dan Jumlah. " .
@@ -172,8 +172,6 @@ Route::post('/api/scan', function (Request $request) {
 
 // 2. Rute untuk Menyimpan Data ke Google Sheets (Disesuaikan dengan Scan Timestamp di Kolom E)
 Route::post('/api/save', function (Request $request) {
-    if (function_exists('ob_clean')) { ob_clean(); } 
-    
     $request->validate([
         'sheetId' => 'required|string|max:128',
         'sheetName' => 'required|string|max:100',
