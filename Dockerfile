@@ -12,7 +12,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install -j$(nproc) gd pdo_sqlite mbstring zip bcmath intl exif pcntl \
-    && a2enmod rewrite \
+    && a2dismod mpm_event mpm_worker 2>/dev/null || true \
+    && a2enmod mpm_prefork rewrite \
     && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/000-default.conf \
     && sed -ri -e 's!Listen 80!Listen 8000!g' /etc/apache2/ports.conf \
     && sed -ri -e 's!<VirtualHost \*:80>!<VirtualHost *:8000>!g' /etc/apache2/sites-available/000-default.conf \
