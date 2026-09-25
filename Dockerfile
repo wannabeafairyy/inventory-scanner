@@ -6,7 +6,7 @@ ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \
 
 # System deps: GD (jpeg/webp), zip, intl, sqlite + Node 20 untuk build Vite.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libpng-dev libjpeg-dev libwebp-dev libzip-dev libicu-dev libonig-dev \
+        libpng-dev libjpeg-dev libwebp-dev libzip-dev libicu-dev libonig-dev libsqlite3-dev \
         unzip curl git ca-certificates \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
