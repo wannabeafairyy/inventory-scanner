@@ -1,8 +1,8 @@
-# Laravel + Apache, port 8000 (default Koyeb).
-FROM php:8.4-apache
+# Laravel tanpa Apache: php-cli + artisan serve di $PORT (Railway/Render/Koyeb).
+FROM php:8.4-cli
 
-ENV APACHE_DOCUMENT_ROOT=/var/www/html/public \
-    COMPOSER_ALLOW_SUPERUSER=1
+ENV COMPOSER_ALLOW_SUPERUSER=1 \
+    PHP_CLI_SERVER_WORKERS=5
 
 # System deps: GD (jpeg/webp), zip, intl, sqlite + Node 20 untuk build Vite.
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -12,11 +12,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get install -y --no-install-recommends nodejs \
     && docker-php-ext-configure gd --with-jpeg --with-webp \
     && docker-php-ext-install -j$(nproc) gd pdo_sqlite mbstring zip bcmath intl exif pcntl \
-    && a2dismod mpm_event mpm_worker 2>/dev/null || true \
-    && a2enmod mpm_prefork rewrite \
-    && sed -ri -e 's!/var/www/html!${APACHE_DOCUMENT_ROOT}!g' /etc/apache2/sites-available/000-default.conf \
-    && sed -ri -e 's!Listen 80!Listen 8000!g' /etc/apache2/ports.conf \
-    && sed -ri -e 's!<VirtualHost \*:80>!<VirtualHost *:8000>!g' /etc/apache2/sites-available/000-default.conf \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -44,5 +39,4 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh \
 
 EXPOSE 8000
 
-# Entrypoint: samakan Apache ke $PORT, siapkan sqlite, migrate, jalan Apache.
 CMD ["/usr/local/bin/docker-entrypoint.sh"]
