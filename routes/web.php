@@ -170,7 +170,24 @@ Route::post('/api/scan', function (Request $request) {
         $text = trim(str_replace(['```json', '```'], '', $text));
         $parsed = json_decode($text, true);
 
-        return response()->json(['rows' => $parsed['rows'] ?? []]);
+        $rows = $parsed['rows'] ?? [];
+
+        // Samakan perilaku semua model: tanggal kosong mengikuti tanggal terdekat di atasnya.
+        $lastDate = '';
+        foreach ($rows as &$row) {
+            $row['date'] = trim((string) ($row['date'] ?? ''));
+            $row['borrowerName'] = trim((string) ($row['borrowerName'] ?? ''));
+            $row['itemName'] = trim((string) ($row['itemName'] ?? ''));
+            $row['quantityTaken'] = trim((string) ($row['quantityTaken'] ?? ''));
+            if ($row['date'] !== '') {
+                $lastDate = $row['date'];
+            } elseif ($lastDate !== '') {
+                $row['date'] = $lastDate;
+            }
+        }
+        unset($row);
+
+        return response()->json(['rows' => $rows]);
     } catch (\Throwable $e) {
         return response()->json(['error' => 'Server Error: ' . $e->getMessage()], 500);
     }
