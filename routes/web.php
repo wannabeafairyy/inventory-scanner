@@ -114,8 +114,14 @@ Route::post('/api/scan', function (Request $request) {
 
     $base64Image = base64_encode($compressedImageBinary);
     
-    $apiKey = config('services.gemini.key');
-    $model = config('services.gemini.model', 'gemini-3.6-flash');
+    $apiKey = trim((string) config('services.gemini.key'));
+    $model = trim((string) config('services.gemini.model', 'gemini-3.6-flash'));
+    if ($apiKey === '') {
+        return response()->json(['error' => 'GEMINI_API_KEY belum dikonfigurasi di server.'], 500);
+    }
+    if ($model === '' || preg_match('/[^A-Za-z0-9_.-]/', $model)) {
+        return response()->json(['error' => 'GEMINI_MODEL tidak valid.'], 500);
+    }
     $endpoint = "https://generativelanguage.googleapis.com/v1beta/models/{$model}:generateContent?key={$apiKey}";
     
     $prompt = "Kamu adalah sistem pemindai formulir inventaris cerdas. " .
