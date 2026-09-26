@@ -128,8 +128,10 @@ Route::post('/api/scan', function (Request $request) {
               "Baca seluruh baris tulisan tangan pada formulir ini yang terdiri dari: Tanggal, Nama Peminjam, Nama Barang, dan Jumlah. " .
               "Jika ada baris di bawahnya yang menggunakan tanda panen atau dikosongkan (mengikuti baris atasnya), ekstrak tanggal/data yang sesuai. " .
               "Koreksi typo atau singkatan pada nama barang. " .
+              "Untuk setiap baris, sertakan confidence (angka 0-100 seberapa yakin kamu membaca baris itu) " .
+              "dan rawText (teks apa adanya seperti tertulis di formulir). " .
               "Kembalikan data dalam format JSON murni tanpa markdown dengan struktur persis seperti ini: " .
-              "{\"rows\": [{\"date\": \"...\", \"borrowerName\": \"...\", \"itemName\": \"...\", \"quantityTaken\": \"...\"}]}";
+              "{\"rows\": [{\"date\": \"...\", \"borrowerName\": \"...\", \"itemName\": \"...\", \"quantityTaken\": \"...\", \"confidence\": 85, \"rawText\": \"...\"}]}";
 
     try {
         $payload = json_encode([
@@ -179,6 +181,12 @@ Route::post('/api/scan', function (Request $request) {
             $row['borrowerName'] = trim((string) ($row['borrowerName'] ?? ''));
             $row['itemName'] = trim((string) ($row['itemName'] ?? ''));
             $row['quantityTaken'] = trim((string) ($row['quantityTaken'] ?? ''));
+            $row['rawText'] = trim((string) ($row['rawText'] ?? ''));
+            if (isset($row['confidence']) && is_numeric($row['confidence'])) {
+                $row['confidence'] = max(0, min(100, (int) round((float) $row['confidence'])));
+            } else {
+                unset($row['confidence']);
+            }
             if ($row['date'] !== '') {
                 $lastDate = $row['date'];
             } elseif ($lastDate !== '') {
@@ -203,6 +211,8 @@ Route::post('/api/save', function (Request $request) {
         'rows.*.borrowerName' => 'nullable|string|max:100',
         'rows.*.itemName' => 'nullable|string|max:200',
         'rows.*.quantityTaken' => 'nullable|string|max:50',
+        'rows.*.confidence' => 'nullable|numeric|min:0|max:100',
+        'rows.*.rawText' => 'nullable|string|max:500',
     ]);
 
     $credentialsPath = base_path('credentials.json');

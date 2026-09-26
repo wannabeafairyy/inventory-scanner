@@ -3,98 +3,61 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Inventory Scanner</title>
+    <title>Handwriting Inventory Scanner</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <style>
-        body { -webkit-font-smoothing: antialiased; }
-        button:disabled { opacity: .65; cursor: not-allowed; }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .spinner { display: inline-block; width: 1rem; height: 1rem; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 9999px; animation: spin .7s linear infinite; vertical-align: -2px; margin-right: .5rem; }
-        input[type="file"]::file-selector-button { cursor: pointer; }
-    </style>
 </head>
-<body class="bg-gradient-to-b from-slate-100 via-blue-50 to-slate-100 min-h-screen text-slate-800">
+<body class="bg-gray-50 min-h-screen text-gray-800 p-4 md:p-10">
 
-    <div class="max-w-5xl mx-auto px-4 md:px-8 py-6 md:py-10 space-y-6">
-
-        <!-- Header -->
-        <header class="bg-gradient-to-r from-blue-700 via-blue-600 to-indigo-600 rounded-2xl shadow-lg text-white p-6 md:p-8">
-            <div class="flex flex-col md:flex-row md:items-center gap-4 md:gap-6">
-                <div class="shrink-0 w-12 h-12 rounded-xl bg-white/20 flex items-center justify-center text-2xl font-bold">IS</div>
-                <div class="flex-1">
-                    <h1 class="text-2xl md:text-3xl font-bold tracking-tight">Inventory Scanner</h1>
-                    <p class="text-blue-100 text-sm md:text-base mt-1">Foto form pengambilan tulisan tangan, AI membacanya, lalu simpan ke Google Sheets.</p>
-                </div>
-            </div>
-            <ol class="flex flex-wrap gap-2 mt-5 text-xs md:text-sm font-medium">
-                <li class="bg-white/15 rounded-full px-3 py-1.5"><span class="font-bold mr-1">1</span> Hubungkan Sheets</li>
-                <li class="bg-white/15 rounded-full px-3 py-1.5"><span class="font-bold mr-1">2</span> Upload Dokumen</li>
-                <li class="bg-white/15 rounded-full px-3 py-1.5"><span class="font-bold mr-1">3</span> Review &amp; Simpan</li>
-            </ol>
+    <div class="max-w-4xl mx-auto space-y-6">
+        <header>
+            <h1 class="text-3xl font-bold tracking-tight text-blue-900">Inventory Scanner</h1>
+            <p class="text-gray-500">Foto form pengambilan tulisan tangan, AI akan membacanya termasuk nama peminjam, dan simpan ke Google Sheets.</p>
         </header>
 
-        <div id="statusAlert" class="hidden p-4 rounded-xl text-sm shadow-sm" role="alert"></div>
+        <div id="statusAlert" class="hidden p-4 rounded-md text-sm"></div>
 
         <!-- 1. Pengaturan Sheets -->
-        <section class="bg-white p-6 md:p-7 rounded-2xl shadow-sm border border-slate-200">
-            <div class="flex items-center gap-3 mb-5">
-                <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm">1</span>
-                <h2 class="text-lg font-semibold">Google Sheets</h2>
-            </div>
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h2 class="text-lg font-semibold mb-4">1. Google Sheets</h2>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label for="sheetId" class="block text-sm font-medium text-slate-700 mb-1.5">Sheet ID / Link</label>
-                    <input type="text" id="sheetId" class="block w-full rounded-lg border-slate-300 shadow-sm border p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition" placeholder="Paste Link Google Sheets di sini...">
-                    <p class="text-xs text-slate-400 mt-1.5">Bisa berupa link panjang atau ID saja. Tersimpan otomatis di browser.</p>
+                    <label class="block text-sm font-medium text-gray-700">Sheet ID</label>
+                    <input type="text" id="sheetId" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500" placeholder="Contoh: 1XyZ_abc123...">
                 </div>
                 <div>
-                    <label for="sheetName" class="block text-sm font-medium text-slate-700 mb-1.5">Tab Name (Nama Sheet)</label>
-                    <input type="text" id="sheetName" value="Sheet1" class="block w-full rounded-lg border-slate-300 shadow-sm border p-2.5 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition">
+                    <label class="block text-sm font-medium text-gray-700">Tab Name (Nama Sheet)</label>
+                    <input type="text" id="sheetName" value="Sheet1" class="mt-1 block w-full rounded-md border-gray-300 shadow-sm border p-2 focus:ring-blue-500 focus:border-blue-500">
                 </div>
             </div>
-        </section>
+        </div>
 
         <!-- 2. Kamera & Upload -->
-        <section class="bg-white p-6 md:p-7 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-sm">2</span>
-                <h2 class="text-lg font-semibold">Upload Dokumen</h2>
-            </div>
-            <label for="imageInput" class="block border-2 border-dashed border-slate-300 rounded-xl p-6 text-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/50 transition">
-                <span class="block text-sm font-medium text-slate-600">Klik untuk pilih foto form, atau seret file ke sini</span>
-                <span class="block text-xs text-slate-400 mt-1">JPEG / PNG / WebP, maksimal 12MB</span>
-            </label>
-            <input type="file" id="imageInput" accept="image/*" capture="environment" class="sr-only">
-
-            <div id="previewContainer" class="hidden mt-2 space-y-4">
-                <img id="imagePreview" alt="Pratinjau dokumen yang diupload" class="max-h-80 w-full object-contain rounded-xl border border-slate-200 bg-slate-50 shadow-inner">
-                <button id="btnScan" class="w-full bg-blue-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-blue-700 active:bg-blue-800 transition shadow-md shadow-blue-200">
+        <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
+            <h2 class="text-lg font-semibold">2. Upload Dokumen</h2>
+            <input type="file" id="imageInput" accept="image/*" capture="environment" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-md file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+            
+            <div id="previewContainer" class="hidden mt-4 space-y-4">
+                <img id="imagePreview" class="max-h-80 w-full object-contain rounded border bg-gray-50">
+                <button id="btnScan" class="w-full bg-blue-600 text-white py-2 px-4 rounded-md font-medium hover:bg-blue-700 transition">
                     Mulai Deteksi AI
                 </button>
             </div>
-        </section>
+        </div>
 
         <!-- 3. Review & Edit -->
-        <section id="reviewSection" class="hidden bg-white p-6 md:p-7 rounded-2xl shadow-sm border border-slate-200 space-y-4">
-            <div class="flex items-center gap-3">
-                <span class="w-8 h-8 rounded-lg bg-green-100 text-green-700 font-bold flex items-center justify-center text-sm">3</span>
-                <div>
-                    <h2 class="text-lg font-semibold">Review Hasil Deteksi AI</h2>
-                    <p class="text-sm text-slate-500">Cek kembali data sebelum disimpan ke Sheets. Kolom masih bisa diedit.</p>
-                </div>
-            </div>
+        <div id="reviewSection" class="hidden bg-white p-6 rounded-xl shadow-sm border border-gray-200 space-y-4">
+            <h2 class="text-lg font-semibold">3. Review Hasil Deteksi AI</h2>
+            <p class="text-sm text-gray-500">Cek kembali data pengambil dan barang sebelum disimpan ke Sheets. Persen keyakinan adalah estimasi AI, bukan akurasi pasti.</p>
+
+            <div id="scanSummary" class="hidden text-sm p-3 rounded-md bg-blue-50 border border-blue-200 text-blue-800"></div>
 
             <div id="rowsContainer" class="space-y-4"></div>
-
-            <button id="btnSave" class="w-full bg-green-600 text-white py-3 px-4 rounded-xl font-semibold hover:bg-green-700 active:bg-green-800 transition shadow-md shadow-green-200">
+            
+            <button id="btnSave" class="w-full bg-green-600 text-white py-2 px-4 rounded-md font-medium hover:bg-green-700 transition shadow-md">
                 Simpan ke Google Sheets
             </button>
-        </section>
-
-        <footer class="text-center text-xs text-slate-400 pb-4">
-            Data hanya dikirim ke AI saat tombol deteksi ditekan. Link Sheets tersimpan lokal di browser Anda.
-        </footer>
+        </div>
     </div>
 
     <script>
@@ -106,7 +69,7 @@
         const rowsContainer = document.getElementById('rowsContainer');
         const btnSave = document.getElementById('btnSave');
         const statusAlert = document.getElementById('statusAlert');
-
+        
         const inputSheetId = document.getElementById('sheetId');
         const inputSheetName = document.getElementById('sheetName');
         const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
@@ -117,16 +80,18 @@
         document.addEventListener('DOMContentLoaded', () => {
             const savedLink = localStorage.getItem('savedSheetLink');
             const savedTab = localStorage.getItem('savedSheetTab');
-
+            
             if (savedLink) inputSheetId.value = savedLink;
             if (savedTab) inputSheetName.value = savedTab;
+            
+            // Update placeholder agar lebih informatif
+            inputSheetId.placeholder = "Paste Link Google Sheets di sini...";
         });
 
         function showAlert(message, isError = true) {
             statusAlert.innerText = message;
-            statusAlert.className = `p-4 rounded-xl text-sm shadow-sm ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`;
+            statusAlert.className = `p-4 rounded-md text-sm ${isError ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`;
             statusAlert.classList.remove('hidden');
-            statusAlert.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
         async function compressImage(file, maxWidth = 1200) {
@@ -198,18 +163,18 @@
             btnScan.disabled = true;
 
             try {
-                btnScan.innerHTML = '<span class="spinner"></span>Memperkecil ukuran foto...';
+                btnScan.innerText = "⏳ Memperkecil ukuran foto...";
                 const compressedFile = await compressImage(imageFile, 1200);
                 const formData = new FormData();
                 formData.append('image', compressedFile);
 
-                btnScan.innerHTML = '<span class="spinner"></span>AI sedang membaca...';
+                btnScan.innerText = "⏳ AI sedang membaca...";
                 const response = await fetch('/api/scan', {
                     method: 'POST',
                     headers: { 'X-CSRF-TOKEN': csrfToken },
                     body: formData
                 });
-
+                
                 const contentType = response.headers.get("content-type");
                 if (!contentType || !contentType.includes("application/json")) throw new Error("Respons server salah (bukan JSON). Coba periksa terminal server.");
 
@@ -218,7 +183,6 @@
 
                 renderReviewRows(result.rows);
                 reviewSection.classList.remove('hidden');
-                reviewSection.scrollIntoView({ behavior: 'smooth' });
             } catch (error) {
                 showAlert(error.message === 'Failed to fetch' ? 'Koneksi terputus! Pastikan server terminal masih menyala.' : error.message);
             } finally {
@@ -230,33 +194,66 @@
         function createReviewField(labelText, value, inputClass) {
             const wrapper = document.createElement('div');
             const label = document.createElement('label');
-            label.className = 'block text-xs text-slate-500 font-semibold uppercase tracking-wide mb-1.5';
+            label.className = 'text-xs text-gray-500 font-semibold uppercase';
             label.textContent = labelText;
             const input = document.createElement('input');
             input.type = 'text';
-            input.className = inputClass + ' w-full border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white';
+            input.className = inputClass + ' w-full border border-gray-300 rounded p-2';
             input.value = value ?? '';
             wrapper.appendChild(label);
             wrapper.appendChild(input);
             return wrapper;
         }
 
+        function confidenceBadge(conf) {
+            const n = Number(conf);
+            const badge = document.createElement('span');
+            if (!Number.isFinite(n)) {
+                badge.className = 'inline-block text-xs font-semibold px-2 py-1 rounded bg-gray-200 text-gray-600';
+                badge.textContent = 'Keyakinan: -';
+                return badge;
+            }
+            const v = Math.max(0, Math.min(100, Math.round(n)));
+            const color = v >= 80 ? 'bg-green-100 text-green-700' : (v >= 50 ? 'bg-yellow-100 text-yellow-700' : 'bg-red-100 text-red-700');
+            badge.className = 'inline-block text-xs font-semibold px-2 py-1 rounded ' + color;
+            badge.textContent = 'Keyakinan AI: ' + v + '%';
+            return badge;
+        }
+
         function renderReviewRows(rows) {
             rowsContainer.innerHTML = '';
+            const summary = document.getElementById('scanSummary');
+            summary.classList.add('hidden');
+            summary.innerText = '';
             if(!rows || rows.length === 0) {
                 const emptyMsg = document.createElement('p');
-                emptyMsg.className = 'text-red-500 text-sm bg-red-50 border border-red-200 rounded-xl p-4';
+                emptyMsg.className = 'text-red-500 text-sm';
                 emptyMsg.textContent = 'Tidak ada data yang terbaca dari gambar.';
                 rowsContainer.appendChild(emptyMsg);
                 return;
             }
-            rows.forEach((row, index) => {
+            let total = 0, count = 0;
+            rows.forEach((row) => {
+                const n = Number(row.confidence);
+                if (Number.isFinite(n)) { total += Math.max(0, Math.min(100, n)); count++; }
+            });
+            if (count > 0) {
+                summary.innerText = 'Rata-rata keyakinan AI: ' + Math.round(total / count) + '% dari ' + rows.length + ' baris. Periksa ulang baris dengan keyakinan rendah.';
+                summary.classList.remove('hidden');
+            }
+            rows.forEach((row) => {
                 const card = document.createElement('div');
-                card.className = 'border border-slate-200 rounded-xl p-4 md:p-5 bg-slate-50 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 row-item shadow-sm';
-                const badge = document.createElement('div');
-                badge.className = 'sm:col-span-2 lg:col-span-4 text-xs font-bold text-slate-400 uppercase tracking-wider';
-                badge.textContent = 'Baris ' + (index + 1);
-                card.appendChild(badge);
+                card.className = 'border rounded-md p-4 bg-gray-50 grid grid-cols-1 md:grid-cols-4 gap-4 row-item';
+                const meta = document.createElement('div');
+                meta.className = 'md:col-span-4 flex flex-wrap items-center gap-2';
+                meta.appendChild(confidenceBadge(row.confidence));
+                if (row.rawText) {
+                    const raw = document.createElement('span');
+                    raw.className = 'text-xs text-gray-500 italic';
+                    raw.textContent = 'Terbaca: "' + row.rawText + '"';
+                    meta.appendChild(raw);
+                }
+                card.appendChild(meta);
                 card.appendChild(createReviewField('Tanggal', row.date || '', 'input-date'));
                 card.appendChild(createReviewField('Nama Pengambil', row.borrowerName || '', 'input-borrower'));
                 card.appendChild(createReviewField('Nama Barang', row.itemName || '', 'input-item'));
@@ -283,7 +280,7 @@
             }
 
             const originalText = btnSave.innerText;
-            btnSave.innerHTML = '<span class="spinner"></span>Menyimpan...';
+            btnSave.innerText = "⏳ Menyimpan...";
             btnSave.disabled = true;
 
             const rowsData = [];
